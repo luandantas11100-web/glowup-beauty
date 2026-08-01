@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+model Service {
+  id        String   @id @default(uuid())
+  title     String
+  tag       String
+  duration  String
+  price     Float
+  desc      String
+  image     String
+  items     String[]
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("services")
+}
+
+model Course {
+  id        String   @id @default(uuid())
+  title     String
+  tag       String
+  duration  String
+  price     Float
+  desc      String
+  image     String
+  items     String[]
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("courses")
+}
+
+model Booking {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String
+  item      String
+  kind      String   // "servico" | "curso"
+  date      DateTime
+  time      String
+  value     Float
+  status    String   @default("pendente")
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("bookings")
+}
