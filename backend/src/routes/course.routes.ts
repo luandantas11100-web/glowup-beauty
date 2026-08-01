@@ -16,6 +16,10 @@ courseRoutes.post("/", ensureAuthenticated, upload.single("image"), (req, res) =
   courseController.create(req, res);
 });
 
+courseRoutes.put("/:id", ensureAuthenticated, upload.single("image"), (req, res) => {
+  courseController.update(req, res);
+});
+
 courseRoutes.delete("/:id", ensureAuthenticated, (req, res) => {
   courseController.delete(req, res);
 });
