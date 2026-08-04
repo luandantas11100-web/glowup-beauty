@@ -28,7 +28,7 @@ function Home() {
             </span>
             <h1 className="font-display text-5xl leading-[1.05] text-foreground md:text-7xl">
               Beleza que revela<br />
-              <em className="text-primary not-italic font-normal">sua essência</em>.
+              <em className="font-normal not-italic text-primary">sua essência</em>.
             </h1>
             <p className="mt-6 max-w-lg text-lg text-muted-foreground">
               Um espaço dedicado à sua autoestima. Maquiagem, cílios, pele e unhas — além de cursos para quem quer transformar a beleza em profissão.
@@ -65,8 +65,6 @@ function Home() {
             <img
               src={heroImg}
               alt="Estúdio de estética Helena Gabriela"
-              width={1600}
-              height={1600}
               className="relative aspect-[4/5] w-full rounded-[2rem] object-cover shadow-[var(--shadow-elegant)]"
             />
             <div className="absolute -bottom-6 -left-6 hidden max-w-[220px] rounded-2xl border border-border bg-background/95 p-5 shadow-[var(--shadow-soft)] backdrop-blur md:block">

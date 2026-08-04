@@ -2,9 +2,10 @@ import { prisma } from "../utils/prisma";
 
 export class DashboardService {
   async getMetrics() {
-    // 1. Todos os agendamentos concluídos
+    // 1. Todos os agendamentos concluídos (buscando apenas o valor para otimizar a query)
     const completedBookings = await prisma.booking.findMany({
       where: { status: "concluido" },
+      select: { value: true },
     });
 
     // 2. Agendamentos pendentes / confirmados
@@ -17,11 +18,19 @@ export class DashboardService {
     });
 
     // 3. Faturamento Total Acumulado
-    const totalRevenue = completedBookings.reduce((sum, b) => sum + b.value, 0);
+    const totalRevenue = completedBookings.reduce(
+      (sum, b) => sum + (Number(b.value) || 0),
+      0
+    );
 
     // 4. Totais ativos de Serviços e Cursos
-    const activeServices = await prisma.service.count({ where: { active: true } });
-    const activeCourses = await prisma.course.count({ where: { active: true } });
+    const activeServices = await prisma.service.count({
+      where: { active: true },
+    });
+    
+    const activeCourses = await prisma.course.count({
+      where: { active: true },
+    });
 
     return {
       revenue: {

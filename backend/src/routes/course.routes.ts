@@ -1,8 +1,8 @@
 import { Router } from "express";
 import multer from "multer";
-import uploadConfig from "../config/upload";
-import { CourseController } from "../controllers/CourseController";
-import { ensureAuthenticated } from "../middlewares/ensureAuthenticated";
+import uploadConfig from "../config/upload.js";
+import { CourseController } from "../controllers/CourseController.js";
+import { ensureAuthenticated } from "../middlewares/ensureAuthenticated.js";
 
 const courseRoutes = Router();
 const courseController = new CourseController();

@@ -2,16 +2,18 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays, LogOut, Lock, TrendingUp, Wallet, Clock, Users,
-  Pencil, Check, X, Trash2, Plus, Upload,
+  Pencil, Check, X, Trash2, Plus, Upload, Loader2,
 } from "lucide-react";
 import { loginRequest } from "@/services/auth";
 import { getBookings, updateBookingStatus, type Booking } from "@/services/booking";
 import { getDashboardMetrics, type DashboardMetrics } from "@/services/dashboard";
-import {
-  type Listing, DEFAULT_STATE, brl, loadState, saveState,
-} from "@/lib/admin-data";
+import { getServices, createService, updateService, deleteService } from "@/services/service";
+import { getCourses, createCourse, updateCourse, deleteCourse } from "@/services/course";
+import { type Listing, brl } from "@/lib/admin-data";
 
-const TOKEN_KEY = "@glowup:token";
+const TOKEN_KEY = "hg-admin-token";
+const FALLBACK_TOKEN_KEY = "@glowup:token";
+const API_BASE_URL = "http://localhost:3333";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -19,12 +21,16 @@ export const Route = createFileRoute("/admin")({
       { title: "Painel da Proprietária — Helena Gabriela" },
       { name: "description", content: "Área restrita de gerenciamento do estúdio Helena Gabriela." },
       { name: "robots", content: "noindex, nofollow" },
-      { property: "og:title", content: "Painel da Proprietária — Helena Gabriela" },
-      { property: "og:description", content: "Área restrita de gerenciamento." },
     ],
   }),
   component: AdminPage,
 });
+
+function resolveImageUrl(url: string) {
+  if (!url) return "/placeholder.jpg";
+  if (url.startsWith("http") || url.startsWith("data:")) return url;
+  return `${API_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+}
 
 /* ---------------------------------- Login --------------------------------- */
 
@@ -41,10 +47,13 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
 
     try {
       const data = await loginRequest({ email, password });
-      localStorage.setItem(TOKEN_KEY, data.token);
+      if (data.token) {
+        sessionStorage.setItem(TOKEN_KEY, data.token);
+        localStorage.setItem(FALLBACK_TOKEN_KEY, data.token);
+      }
       onSuccess();
     } catch (err: any) {
-      setError(err.response?.data?.error || "E-mail ou senha incorretos.");
+      setError(err.response?.data?.error || err.response?.data?.message || "E-mail ou senha incorretos.");
     } finally {
       setLoading(false);
     }
@@ -72,7 +81,7 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
           autoComplete="username"
           required
           className="mt-2 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-primary"
-          placeholder="seu@email.com"
+          placeholder="admin@helenagabriela.com.br"
         />
 
         <label className="mt-5 block text-xs uppercase tracking-[0.2em] text-muted-foreground">Senha</label>
@@ -120,10 +129,10 @@ function StatCard({
 }
 
 const STATUS_STYLES: Record<Booking["status"], string> = {
-  pendente: "bg-primary/15 text-primary",
-  confirmado: "bg-secondary text-foreground",
-  concluido: "bg-primary text-primary-foreground",
-  cancelado: "bg-muted text-muted-foreground line-through",
+  pendente: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30",
+  confirmado: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30",
+  concluido: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30",
+  cancelado: "bg-rose-500/15 text-rose-700 dark:text-rose-400 line-through border border-rose-500/30",
 };
 
 const STATUS_LABEL: Record<Booking["status"], string> = {
@@ -145,9 +154,11 @@ function BookingsPanel({
   bookings, onStatus,
 }: {
   bookings: Booking[];
-  onStatus: (id: string, status: Booking["status"]) => void;
+  onStatus: (id: string, status: Booking["status"]) => Promise<void>;
 }) {
   const [filter, setFilter] = useState<"todos" | Booking["status"]>("todos");
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
   const list = useMemo(
     () =>
       [...bookings]
@@ -155,6 +166,15 @@ function BookingsPanel({
         .sort((a, b) => (a.date < b.date ? 1 : -1)),
     [bookings, filter],
   );
+
+  const handleStatusSelect = async (id: string, newStatus: Booking["status"]) => {
+    setUpdatingId(id);
+    try {
+      await onStatus(id, newStatus);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   return (
     <div>
@@ -188,7 +208,7 @@ function BookingsPanel({
             className="grid gap-2 border-b border-border/60 px-6 py-5 text-sm last:border-0 md:grid-cols-[1.4fr_1fr_1.4fr_0.9fr_0.8fr_1.4fr] md:items-center md:gap-4"
           >
             <div>
-              <div className="text-foreground">{b.name}</div>
+              <div className="text-foreground font-medium">{b.name}</div>
               {b.note && <div className="text-xs text-muted-foreground">{b.note}</div>}
             </div>
             <div className="text-muted-foreground">{b.phone}</div>
@@ -199,22 +219,32 @@ function BookingsPanel({
               </span>
             </div>
             <div className="text-muted-foreground">{fmtDate(b.date)} · {b.time}</div>
-           <div className="text-foreground">{brl(b.value ?? 0)}</div>
+            <div className="text-foreground font-semibold">{brl(b.value ?? 0)}</div>
             <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={b.status}
-                onChange={(e) => onStatus(b.id, e.target.value as Booking["status"])}
-                className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.15em] outline-none ${STATUS_STYLES[b.status]}`}
-              >
-                {(["pendente", "confirmado", "concluido", "cancelado"] as const).map((s) => (
-                  <option key={s} value={s}>{STATUS_LABEL[s]}</option>
-                ))}
-              </select>
+              <div className="relative flex items-center">
+                <select
+                  disabled={updatingId === b.id}
+                  value={b.status}
+                  onChange={(e) => handleStatusSelect(b.id, e.target.value as Booking["status"])}
+                  className={`rounded-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] outline-none cursor-pointer transition-all ${
+                    STATUS_STYLES[b.status]
+                  } ${updatingId === b.id ? "opacity-50 pointer-events-none" : ""}`}
+                >
+                  {(["pendente", "confirmado", "concluido", "cancelado"] as const).map((s) => (
+                    <option key={s} value={s} className="bg-background text-foreground">
+                      {STATUS_LABEL[s]}
+                    </option>
+                  ))}
+                </select>
+                {updatingId === b.id && (
+                  <Loader2 className="ml-2 size-3 animate-spin text-primary" />
+                )}
+              </div>
               <a
                 href={`https://wa.me/55${b.phone.replace(/\D/g, "")}`}
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs text-primary hover:underline"
+                className="text-xs text-primary hover:underline ml-1"
               >
                 WhatsApp
               </a>
@@ -230,15 +260,49 @@ function BookingsPanel({
 
 function ListingEditor({
   item, onSave, onCancel,
-}: { item: Listing; onSave: (l: Listing) => void; onCancel: () => void }) {
+}: {
+  item: Listing;
+  onSave: (l: Listing, file?: File) => Promise<void>;
+  onCancel: () => void;
+}) {
   const [draft, setDraft] = useState<Listing>(item);
+  const [previewImage, setPreviewImage] = useState<string>(resolveImageUrl(item.image));
+  const [selectedFile, setSelectedFile] = useState<File | undefined>();
+  const [rawItems, setRawItems] = useState(item.items ? item.items.join("\n") : "");
+  const [saving, setSaving] = useState(false);
 
   function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setSelectedFile(file);
     const reader = new FileReader();
-    reader.onload = () => setDraft({ ...draft, image: String(reader.result) });
+    reader.onload = () => setPreviewImage(String(reader.result));
     reader.readAsDataURL(file);
+  }
+
+  async function handleSave() {
+    if (!draft.title || !draft.price) {
+      alert("Título e Preço são obrigatórios.");
+      return;
+    }
+    if (!item.id && !selectedFile) {
+      alert("Selecione uma imagem de capa.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const parsedItems = rawItems
+        .split("\n")
+        .map((i) => i.trim())
+        .filter(Boolean);
+
+      await onSave({ ...draft, items: parsedItems }, selectedFile);
+    } catch (err: any) {
+      alert(err.response?.data?.error || "Erro ao salvar alterações.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const field = "mt-2 w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary";
@@ -248,24 +312,18 @@ function ListingEditor({
     <div className="rounded-2xl border border-primary/40 bg-card p-6">
       <div className="grid gap-5 md:grid-cols-[220px_1fr]">
         <div>
-          <img src={draft.image} alt={draft.title} className="aspect-[4/3] w-full rounded-xl object-cover" />
+          <img src={previewImage} alt={draft.title} className="aspect-[4/3] w-full rounded-xl object-cover bg-secondary" />
           <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-full border border-border px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-foreground/80 hover:text-foreground">
-            <Upload className="size-3.5" /> Trocar foto
+            <Upload className="size-3.5" /> Enviar foto
             <input type="file" accept="image/*" className="hidden" onChange={pickFile} />
           </label>
-          <input
-            value={draft.image.startsWith("data:") ? "" : draft.image}
-            onChange={(e) => setDraft({ ...draft, image: e.target.value })}
-            placeholder="ou cole a URL da imagem"
-            className={field}
-          />
         </div>
 
         <div className="grid gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <span className={label}>Título</span>
-              <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className={field} />
+              <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className={field} required />
             </div>
             <div>
               <span className={label}>Etiqueta</span>
@@ -273,7 +331,7 @@ function ListingEditor({
             </div>
             <div>
               <span className={label}>Duração</span>
-              <input value={draft.duration} onChange={(e) => setDraft({ ...draft, duration: e.target.value })} className={field} />
+              <input value={draft.duration} onChange={(e) => setDraft({ ...draft, duration: e.target.value })} className={field} placeholder="Ex: 1h30" />
             </div>
             <div>
               <span className={label}>Valor (R$)</span>
@@ -282,6 +340,7 @@ function ListingEditor({
                 value={draft.price}
                 onChange={(e) => setDraft({ ...draft, price: Number(e.target.value) })}
                 className={field}
+                required
               />
             </div>
           </div>
@@ -298,29 +357,33 @@ function ListingEditor({
             <span className={label}>Itens do anúncio (um por linha)</span>
             <textarea
               rows={4}
-              value={draft.items.join("\n")}
-              onChange={(e) => setDraft({ ...draft, items: e.target.value.split("\n") })}
+              value={rawItems}
+              onChange={(e) => setRawItems(e.target.value)}
               className={field}
             />
           </div>
-          <label className="flex items-center gap-3 text-sm text-foreground/80">
-            <input
-              type="checkbox"
-              checked={draft.active}
-              onChange={(e) => setDraft({ ...draft, active: e.target.checked })}
-              className="size-4 accent-[hsl(var(--primary))]"
-            />
-            Visível no site
-          </label>
+          {item.id && (
+            <label className="flex items-center gap-3 text-sm text-foreground/80">
+              <input
+                type="checkbox"
+                checked={draft.active}
+                onChange={(e) => setDraft({ ...draft, active: e.target.checked })}
+                className="size-4 accent-[hsl(var(--primary))]"
+              />
+              Visível no site
+            </label>
+          )}
           <div className="flex gap-3">
             <button
-              onClick={() => onSave({ ...draft, items: draft.items.filter((i) => i.trim()) })}
-              className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] text-primary-foreground"
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] text-primary-foreground disabled:opacity-50"
             >
-              <Check className="size-4" /> Salvar
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Salvar
             </button>
             <button
               onClick={onCancel}
+              disabled={saving}
               className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] text-foreground/80"
             >
               <X className="size-4" /> Cancelar
@@ -333,75 +396,99 @@ function ListingEditor({
 }
 
 function ListingsPanel({
-  title, items, onChange,
-}: { title: string; items: Listing[]; onChange: (next: Listing[]) => void }) {
-  const [editing, setEditing] = useState<string | null>(null);
+  title, items, onSave, onDelete,
+}: {
+  title: string;
+  items: Listing[];
+  onSave: (item: Listing, file?: File) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  function addNew() {
-    const id = `novo-${Date.now()}`;
-    onChange([
-      ...items,
-      {
-        id, title: "Novo item", tag: "Novo", duration: "1h", price: 0,
-        desc: "Descreva aqui o que está incluso.", image: items[0]?.image ?? "",
-        items: ["Item 1"], active: false,
-      },
-    ]);
-    setEditing(id);
-  }
+  const newItemTemplate: Listing = {
+    id: "",
+    title: "",
+    tag: "",
+    duration: "",
+    price: 0,
+    desc: "",
+    image: "",
+    items: [],
+    active: true,
+  };
 
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="font-display text-2xl text-foreground">{title}</h2>
-        <button
-          onClick={addNew}
-          className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] text-primary-foreground"
-        >
-          <Plus className="size-4" /> Adicionar
-        </button>
+        {!creating && (
+          <button
+            onClick={() => { setCreating(true); setEditingId(null); }}
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] text-primary-foreground"
+          >
+            <Plus className="size-4" /> Adicionar
+          </button>
+        )}
       </div>
 
       <div className="mt-6 space-y-4">
+        {creating && (
+          <ListingEditor
+            item={newItemTemplate}
+            onCancel={() => setCreating(false)}
+            onSave={async (draft, file) => {
+              await onSave(draft, file);
+              setCreating(false);
+            }}
+          />
+        )}
+
         {items.map((item) =>
-          editing === item.id ? (
+          editingId === item.id ? (
             <ListingEditor
               key={item.id}
               item={item}
-              onCancel={() => setEditing(null)}
-              onSave={(next) => {
-                onChange(items.map((i) => (i.id === item.id ? next : i)));
-                setEditing(null);
+              onCancel={() => setEditingId(null)}
+              onSave={async (draft, file) => {
+                await onSave(draft, file);
+                setEditingId(null);
               }}
             />
           ) : (
             <div key={item.id} className="flex flex-wrap items-center gap-5 rounded-2xl border border-border bg-card p-5">
-              <img src={item.image} alt={item.title} className="size-20 shrink-0 rounded-xl object-cover" />
+              <img src={resolveImageUrl(item.image)} alt={item.title} className="size-20 shrink-0 rounded-xl object-cover bg-secondary" />
               <div className="min-w-[200px] flex-1">
                 <div className="flex items-center gap-3">
                   <span className="font-display text-xl text-foreground">{item.title}</span>
-                  <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-                    {item.tag}
-                  </span>
+                  {item.tag && (
+                    <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+                      {item.tag}
+                    </span>
+                  )}
                   {!item.active && (
-                    <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+                    <span className="rounded-full bg-muted px-[10px] py-0.5 text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
                       Oculto
                     </span>
                   )}
                 </div>
                 <p className="mt-1 max-w-xl text-sm text-muted-foreground">{item.desc}</p>
-                <div className="mt-1 text-xs text-muted-foreground">{item.duration} · {item.items.length} itens</div>
+                <div className="mt-1 text-xs text-muted-foreground">{item.duration} · {item.items?.length || 0} itens</div>
               </div>
               <div className="font-display text-2xl text-primary">{brl(item.price)}</div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setEditing(item.id)}
+                  onClick={() => { setEditingId(item.id); setCreating(false); }}
                   className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-foreground/80 hover:text-foreground"
                 >
                   <Pencil className="size-3.5" /> Editar
                 </button>
                 <button
-                  onClick={() => onChange(items.filter((i) => i.id !== item.id))}
+                  onClick={async () => {
+                    if (confirm(`Deseja remover "${item.title}"?`)) {
+                      await onDelete(item.id);
+                    }
+                  }}
                   aria-label="Remover"
                   className="rounded-full border border-border px-3 py-2 text-muted-foreground hover:text-destructive"
                 >
@@ -426,31 +513,56 @@ function AdminPage() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Visão geral");
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [services, setServices] = useState<Listing[]>([]);
+  const [courses, setCourses] = useState<Listing[]>([]);
 
-  // Estado local para Serviços e Cursos cadastráveis
-  const [listingsState, setListingsState] = useState(() => loadState());
+  // Recalculo dos dados no próprio frontend se as métricas da API falharem/estiverem vazias
+  const derivedMetrics = useMemo(() => {
+    const completedBookings = bookings.filter((b) => b.status === "concluido");
+    const pendingBookings = bookings.filter((b) => b.status === "pendente");
+    const confirmedBookings = bookings.filter((b) => b.status === "confirmado");
 
-  // Salva no localStorage quando o catálogo de serviços/cursos for editado
-  useEffect(() => {
-    if (ready) saveState(listingsState);
-  }, [listingsState, ready]);
+    const calculatedRevenue = completedBookings.reduce(
+      (acc, curr) => acc + (curr.value ?? 0),
+      0
+    );
 
-  // Carregar dados da API ao estar autenticado
+    return {
+      revenueTotal: metrics?.revenue?.total ?? calculatedRevenue,
+      completedCount: metrics?.revenue?.completedCount ?? completedBookings.length,
+      pendingCount: metrics?.bookings?.pending ?? pendingBookings.length,
+      totalCount: metrics?.bookings?.total ?? bookings.length,
+      confirmedCount: metrics?.bookings?.confirmed ?? confirmedBookings.length,
+    };
+  }, [bookings, metrics]);
+
   async function loadData() {
     try {
-      const [m, b] = await Promise.all([
+      const [mRes, bRes, sRes, cRes] = await Promise.allSettled([
         getDashboardMetrics(),
         getBookings(),
+        getServices(),
+        getCourses(),
       ]);
-      setMetrics(m);
-      setBookings(b);
+
+      if (mRes.status === "fulfilled") setMetrics(mRes.value);
+      else console.warn("Erro ao carregar métricas do backend:", mRes.reason);
+
+      if (bRes.status === "fulfilled") setBookings(bRes.value);
+      else console.warn("Erro ao carregar agendamentos:", bRes.reason);
+
+      if (sRes.status === "fulfilled") setServices(sRes.value);
+      else console.error("Erro ao carregar serviços:", sRes.reason);
+
+      if (cRes.status === "fulfilled") setCourses(cRes.value);
+      else console.error("Erro ao carregar cursos:", cRes.reason);
     } catch (err) {
-      console.error("Erro ao carregar dados do backend:", err);
+      console.error("Erro geral no loadData:", err);
     }
   }
 
   useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(FALLBACK_TOKEN_KEY);
     if (token) {
       setAuthed(true);
       loadData();
@@ -459,44 +571,96 @@ function AdminPage() {
   }, [authed]);
 
   async function handleStatusChange(id: string, status: Booking["status"]) {
+    // 1. Atualização Otimista no estado local (troca na hora a cor, status e os cards de faturamento/métricas)
+    setBookings((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, status } : item))
+    );
+
     try {
+      // 2. Persiste a alteração no banco de dados via API
       await updateBookingStatus(id, status);
-      await loadData();
+      
+      // 3. Tenta recarregar as métricas do backend em segundo plano
+      try {
+        const updatedMetrics = await getDashboardMetrics();
+        setMetrics(updatedMetrics);
+      } catch (metricErr) {
+        console.warn("Status atualizado no banco, mas a rota de métricas falhou. Usando cálculo local.", metricErr);
+      }
     } catch (err) {
-      alert("Não foi possível atualizar o status do agendamento.");
+      alert("Não foi possível atualizar o status do agendamento no banco de dados.");
+      await loadData(); // Reverte alterações locais APENAS se a chamada principal de atualização falhar
     }
   }
 
-  if (!ready) return <div className="min-h-[60vh]" />;
+  /* ---------------- Service Handlers ---------------- */
+
+  async function handleSaveService(item: Listing, file?: File) {
+    if (item.id) {
+      await updateService(item.id, item, file);
+    } else {
+      if (!file) throw new Error("Imagem obrigatória.");
+      await createService(item, file);
+    }
+    await loadData();
+  }
+
+  async function handleDeleteService(id: string) {
+    await deleteService(id);
+    await loadData();
+  }
+
+  /* ---------------- Course Handlers ---------------- */
+
+  async function handleSaveCourse(item: Listing, file?: File) {
+    if (item.id) {
+      await updateCourse(item.id, item, file);
+    } else {
+      if (!file) throw new Error("Imagem obrigatória.");
+      await createCourse(item, file);
+    }
+    await loadData();
+  }
+
+  async function handleDeleteCourse(id: string) {
+    await deleteCourse(id);
+    await loadData();
+  }
+
+  function handleLogout() {
+    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(FALLBACK_TOKEN_KEY);
+    setAuthed(false);
+  }
+
+  if (!ready) return null;
   if (!authed) return <LoginScreen onSuccess={() => setAuthed(true)} />;
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-14">
-      <div className="flex flex-wrap items-end justify-between gap-6">
+    <div className="mx-auto max-w-7xl px-6 py-12">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-6">
         <div>
-          <div className="text-xs uppercase tracking-[0.3em] text-primary">Painel privado</div>
-          <h1 className="mt-3 font-display text-4xl text-foreground md:text-5xl">Gerenciamento do estúdio</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Solicitações de agendamento, faturamento e catálogo.
-          </p>
+          <span className="text-[10px] uppercase tracking-[0.3em] text-primary">Estúdio Helena Gabriela</span>
+          <h1 className="font-display text-4xl text-foreground">Painel da Proprietária</h1>
         </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => { localStorage.removeItem(TOKEN_KEY); setAuthed(false); }}
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] text-primary-foreground"
-          >
-            <LogOut className="size-4" /> Sair
-          </button>
-        </div>
+        <button
+          onClick={handleLogout}
+          className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2 text-xs uppercase tracking-[0.2em] text-muted-foreground hover:text-foreground"
+        >
+          <LogOut className="size-4" /> Sair
+        </button>
       </div>
 
-      <div className="mt-10 flex flex-wrap gap-2 border-b border-border pb-4">
+      {/* Navegação de Abas */}
+      <div className="mt-8 flex border-b border-border">
         {TABS.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`rounded-full px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] transition-colors ${
-              tab === t ? "bg-primary text-primary-foreground" : "text-foreground/70 hover:text-foreground"
+            className={`border-b-2 px-6 py-3 text-xs uppercase tracking-[0.2em] transition-colors ${
+              tab === t
+                ? "border-primary text-primary font-semibold"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             {t}
@@ -504,83 +668,56 @@ function AdminPage() {
         ))}
       </div>
 
-      <div className="mt-10">
+      <div className="mt-8">
         {tab === "Visão geral" && (
-          <>
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-8">
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               <StatCard
                 icon={Wallet}
-                label="Faturamento Total"
-                value={brl(metrics?.revenue.total || 0)}
-                hint={`${metrics?.revenue.completedCount || 0} atendimentos concluídos`}
+                label="Faturamento Realizado"
+                value={brl(derivedMetrics.revenueTotal)}
+                hint={`${derivedMetrics.completedCount} agendamentos concluídos`}
               />
               <StatCard
                 icon={Clock}
                 label="Agendamentos Pendentes"
-                value={String(metrics?.bookings.pending || 0)}
-                hint="Aguardando confirmação"
+                value={String(derivedMetrics.pendingCount)}
+                hint="Aguardando confirmação ou atendimento"
               />
               <StatCard
-                icon={CalendarDays}
-                label="Confirmados"
-                value={String(metrics?.bookings.confirmed || 0)}
-                hint="Agendamentos ativos"
-              />
-              <StatCard
-                icon={TrendingUp}
+                icon={Users}
                 label="Total de Solicitações"
-                value={String(metrics?.bookings.total || 0)}
-                hint="Histórico do estúdio"
+                value={String(derivedMetrics.totalCount)}
+                hint={`${derivedMetrics.confirmedCount} confirmados`}
               />
             </div>
 
-            <div className="mt-8 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-              <div className="rounded-2xl border border-border bg-card p-7">
-                <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.25em] text-muted-foreground">
-                  <Users className="size-4 text-primary" /> Próximas solicitações
-                </div>
-                <div className="mt-6 space-y-4">
-                  {bookings
-                    .filter((b) => b.status === "pendente" || b.status === "confirmado")
-                    .sort((a, b) => (a.date > b.date ? 1 : -1))
-                    .slice(0, 5)
-                    .map((b) => (
-                      <div key={b.id} className="flex items-center justify-between gap-3 border-b border-border/60 pb-3 last:border-0">
-                        <div>
-                          <div className="text-sm text-foreground">{b.name}</div>
-                          <div className="text-xs text-muted-foreground">{b.item} · {fmtDate(b.date)} {b.time}</div>
-                        </div>
-                        <span className={`rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.15em] ${STATUS_STYLES[b.status]}`}>
-                          {STATUS_LABEL[b.status]}
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              </div>
+            <div>
+              <h2 className="mb-4 font-display text-2xl text-foreground">Últimos Agendamentos</h2>
+              <BookingsPanel bookings={bookings.slice(0, 5)} onStatus={handleStatusChange} />
             </div>
-          </>
+          </div>
         )}
 
         {tab === "Agendamentos" && (
-          <BookingsPanel
-            bookings={bookings}
-            onStatus={handleStatusChange}
-          />
+          <BookingsPanel bookings={bookings} onStatus={handleStatusChange} />
         )}
 
         {tab === "Serviços" && (
           <ListingsPanel
-            title="Serviços do estúdio"
-            items={listingsState.services}
-            onChange={(services) => setListingsState((s) => ({ ...s, services }))}
+            title="Catálogo de Serviços"
+            items={services}
+            onSave={handleSaveService}
+            onDelete={handleDeleteService}
           />
         )}
 
         {tab === "Cursos" && (
           <ListingsPanel
-            title="Cursos"
-            items={listingsState.courses}
-            onChange={(courses) => setListingsState((s) => ({ ...s, courses }))}
+            title="Catálogo de Cursos"
+            items={courses}
+            onSave={handleSaveCourse}
+            onDelete={handleDeleteCourse}
           />
         )}
       </div>

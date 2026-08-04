@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { authRoutes } from "./auth.routes";
-import { serviceRoutes } from "./service.routes";
-import { courseRoutes } from "./course.routes";
-import { bookingRoutes } from "./booking.routes";
-import { dashboardRoutes } from "./dashboard.routes";
+import { authRoutes } from "./auth.routes.js";
+import { serviceRoutes } from "./service.routes.js";
+import { courseRoutes } from "./course.routes.js";
+import { bookingRoutes } from "./booking.routes.js";
+import { dashboardRoutes } from "./dashboard.routes.js";
 
 const routes = Router();
 

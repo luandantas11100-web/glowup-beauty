@@ -1,5 +1,19 @@
 import { api } from "../lib/api";
 
+export interface Booking {
+  id: string;
+  name: string;
+  phone: string;
+  item: string;
+  kind?: "servico" | "curso";
+  date: string;
+  time: string;
+  status: "pendente" | "confirmado" | "concluido" | "cancelado";
+  value?: number;
+  note?: string;
+  createdAt?: string;
+}
+
 export interface CreateBookingData {
   name: string;
   phone: string;
@@ -16,12 +30,12 @@ export async function createBooking(data: CreateBookingData) {
   return response.data;
 }
 
-export async function getBookings() {
+export async function getBookings(): Promise<Booking[]> {
   const response = await api.get("/bookings");
   return response.data;
 }
 
-export async function updateBookingStatus(id: string, status: string) {
+export async function updateBookingStatus(id: string, status: Booking["status"]) {
   const response = await api.patch(`/bookings/${id}/status`, { status });
   return response.data;
 }
