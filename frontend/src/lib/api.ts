@@ -1,6 +1,9 @@
 import axios, { type InternalAxiosRequestConfig } from "axios";
 
-export const API_URL = "http://localhost:3333";
+// Lê a URL da API das variáveis de ambiente (Vercel) ou usa localhost como padrão
+export const API_URL = import.meta.env.VITE_API_URL 
+  ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, "") // Remove o sufixo /api se houver
+  : "http://localhost:3333";
 
 export const api = axios.create({
   baseURL: `${API_URL}/api`,
