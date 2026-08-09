@@ -18,28 +18,29 @@ export const Route = createFileRoute("/agendamentos")({
   component: AgendamentosPage,
 });
 
-interface ServiceItem {
+interface BookingOption {
   id: string;
   name: string;
   price?: number;
   duration?: string;
+  kind: "servico" | "curso";
 }
 
-const FALLBACK_SERVICES = [
-  "Maquiagem social",
-  "Maquiagem noiva",
-  "Cílios — fio a fio",
-  "Cílios — volume",
-  "Limpeza de pele",
-  "Manicure / esmaltação em gel",
-  "Consulta sobre cursos",
+const FALLBACK_SERVICES: BookingOption[] = [
+  { id: "f1", name: "Maquiagem social", price: 80, kind: "servico" },
+  { id: "f2", name: "Maquiagem noiva", price: 150, kind: "servico" },
+  { id: "f3", name: "Cílios — fio a fio", price: 90, kind: "servico" },
+  { id: "f4", name: "Cílios — volume", price: 110, kind: "servico" },
+  { id: "f5", name: "Limpeza de pele", price: 100, kind: "servico" },
+  { id: "f6", name: "Manicure / esmaltação em gel", price: 50, kind: "servico" },
+  { id: "f7", name: "Consulta sobre cursos", price: 0, kind: "curso" },
 ];
 
 const SLOTS = ["09:00", "10:30", "13:00", "14:30", "16:00", "17:30"];
 
 function AgendamentosPage() {
-  const [servicesList, setServicesList] = useState<ServiceItem[]>([]);
-  const [loadingServices, setLoadingServices] = useState(true);
+  const [itemsList, setItemsList] = useState<BookingOption[]>([]);
+  const [loadingItems, setLoadingItems] = useState(true);
 
   const [service, setService] = useState<string>("");
   const [date, setDate] = useState<Date | undefined>(undefined);
@@ -50,48 +51,62 @@ function AgendamentosPage() {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Busca a lista de serviços do banco de dados Neon via API
+  // Busca serviços e cursos simultaneamente do banco via API
   useEffect(() => {
-    async function fetchServices() {
+    async function fetchServicesAndCourses() {
       try {
-        setLoadingServices(true);
-        const response = await api.get("/services");
-        const data = response.data;
+        setLoadingItems(true);
 
-        if (Array.isArray(data) && data.length > 0) {
-          setServicesList(data);
-          setService(data[0].name); // Seleciona o primeiro serviço do banco
+        const [servicesRes, coursesRes] = await Promise.all([
+          api.get("/services").catch(() => ({ data: [] })),
+          api.get("/courses").catch(() => ({ data: [] })),
+        ]);
+
+        const servicesData = Array.isArray(servicesRes.data) ? servicesRes.data : [];
+        const coursesData = Array.isArray(coursesRes.data) ? coursesRes.data : [];
+
+        // Mapeia os dados do backend garantindo compatibilidade de nome/title
+        const mappedServices: BookingOption[] = servicesData.map((s: any) => ({
+          id: s.id,
+          name: s.name || s.title || "Serviço sem nome",
+          price: s.price ?? 80,
+          duration: s.duration,
+          kind: "servico",
+        }));
+
+        const mappedCourses: BookingOption[] = coursesData.map((c: any) => ({
+          id: c.id,
+          name: c.name || c.title || "Curso sem nome",
+          price: c.price ?? 100,
+          duration: c.duration,
+          kind: "curso",
+        }));
+
+        const combinedList = [...mappedServices, ...mappedCourses];
+
+        if (combinedList.length > 0) {
+          setItemsList(combinedList);
+          setService(combinedList[0].name);
         } else {
-          // Fallback caso a tabela no banco esteja vazia
-          const formattedFallback = FALLBACK_SERVICES.map((s, idx) => ({
-            id: String(idx + 1),
-            name: s,
-            price: 80,
-          }));
-          setServicesList(formattedFallback);
-          setService(formattedFallback[0].name);
+          setItemsList(FALLBACK_SERVICES);
+          setService(FALLBACK_SERVICES[0].name);
         }
       } catch (error) {
-        console.error("Erro ao carregar serviços do banco:", error);
-        const formattedFallback = FALLBACK_SERVICES.map((s, idx) => ({
-          id: String(idx + 1),
-          name: s,
-          price: 80,
-        }));
-        setServicesList(formattedFallback);
-        setService(formattedFallback[0].name);
+        console.error("Erro ao carregar dados do banco:", error);
+        setItemsList(FALLBACK_SERVICES);
+        setService(FALLBACK_SERVICES[0].name);
       } finally {
-        setLoadingServices(false);
+        setLoadingItems(false);
       }
     }
 
-    fetchServices();
+    fetchServicesAndCourses();
   }, []);
 
-  // Localiza o objeto do serviço selecionado para extrair o valor correto
-  const selectedServiceObj = useMemo(() => {
-    return servicesList.find((s) => s.name === service);
-  }, [servicesList, service]);
+  // Localiza o item selecionado para extrair preço e tipo (servico ou curso)
+  const selectedItemObj = useMemo(() => {
+    return itemsList.find((s) => s.name === service);
+  }, [itemsList, service]);
 
   const dateLabel = useMemo(
     () => date?.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" }),
@@ -115,21 +130,19 @@ function AgendamentosPage() {
     setLoading(true);
 
     try {
-      // 1. Envia a solicitação de agendamento para o Backend (PostgreSQL)
       await createBooking({
         name,
         phone,
         item: service,
-        kind: service.toLowerCase().includes("curso") ? "curso" : "servico",
+        kind: selectedItemObj?.kind || (service.toLowerCase().includes("curso") ? "curso" : "servico"),
         date: formattedDateForBackend,
         time: slot,
-        value: selectedServiceObj?.price ?? 80,
+        value: selectedItemObj?.price ?? 80,
         note: notes,
       });
 
-      // 2. Abre a mensagem formatada para o WhatsApp
       const msg = encodeURIComponent(
-        `Olá Helena! Gostaria de agendar:\n\n• Serviço: ${service}\n• Data: ${dateLabel}\n• Horário: ${slot}\n• Nome: ${name}\n• Telefone: ${phone}${notes ? `\n• Observações: ${notes}` : ""}`,
+        `Olá Helena! Gostaria de agendar:\n\n• Opção: ${service}\n• Data: ${dateLabel}\n• Horário: ${slot}\n• Nome: ${name}\n• Telefone: ${phone}${notes ? `\n• Observações: ${notes}` : ""}`,
       );
       window.open(`https://wa.me/557998580613?text=${msg}`, "_blank");
 
@@ -151,7 +164,7 @@ function AgendamentosPage() {
             Reserve o seu momento.
           </h1>
           <p className="mt-6 max-w-xl text-lg text-muted-foreground">
-            Escolha o serviço, a data e o horário. A confirmação é feita rapidinho pelo WhatsApp.
+            Escolha o serviço ou curso, a data e o horário. A confirmação é feita rapidinho pelo WhatsApp.
           </p>
         </div>
       </section>
@@ -181,33 +194,32 @@ function AgendamentosPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="grid gap-8 lg:grid-cols-[1.1fr_1fr]">
-            {/* Left: service + date + slots */}
             <div className="space-y-8">
               <div className="rounded-3xl border border-border bg-card p-8 shadow-[var(--shadow-soft)]">
                 <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-primary">
                   <span className="flex size-6 items-center justify-center rounded-full bg-primary/10">1</span>
-                  Serviço
+                  Serviço ou Curso
                 </div>
 
-                {loadingServices ? (
+                {loadingItems ? (
                   <div className="mt-5 flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin text-primary" /> Carregando serviços...
+                    <Loader2 className="size-4 animate-spin text-primary" /> Carregando opções...
                   </div>
                 ) : (
                   <div className="mt-5 flex flex-wrap gap-2">
-                    {servicesList.map((s) => (
+                    {itemsList.map((item) => (
                       <button
-                        key={s.id || s.name}
+                        key={item.id || item.name}
                         type="button"
-                        onClick={() => setService(s.name)}
+                        onClick={() => setService(item.name)}
                         className={cn(
                           "rounded-full border px-4 py-2 text-sm transition-colors",
-                          service === s.name
+                          service === item.name
                             ? "border-primary bg-primary text-primary-foreground"
                             : "border-border bg-background text-foreground/80 hover:border-primary/40",
                         )}
                       >
-                        {s.name}
+                        {item.name}
                       </button>
                     ))}
                   </div>
@@ -259,7 +271,6 @@ function AgendamentosPage() {
               </div>
             </div>
 
-            {/* Right: summary + form */}
             <aside className="lg:sticky lg:top-28 lg:h-fit">
               <div className="rounded-3xl border border-border bg-gradient-to-br from-background to-secondary/50 p-8 shadow-[var(--shadow-elegant)]">
                 <div className="text-xs uppercase tracking-[0.3em] text-primary">Resumo</div>
@@ -267,8 +278,8 @@ function AgendamentosPage() {
 
                 <dl className="mt-6 space-y-4 border-y border-border/70 py-6 text-sm">
                   <div className="flex items-start justify-between gap-4">
-                    <dt className="text-muted-foreground">Serviço</dt>
-                    <dd className="text-right font-medium text-foreground">{service || "Nenhum selecionado"}</dd>
+                    <dt className="text-muted-foreground">Opção</dt>
+                    <dd className="text-right font-medium text-foreground">{service || "Nenhuma selecionada"}</dd>
                   </div>
                   <div className="flex items-start justify-between gap-4">
                     <dt className="flex items-center gap-2 text-muted-foreground"><CalendarIcon className="size-3.5" /> Data</dt>
