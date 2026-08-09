@@ -81,7 +81,7 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
           autoComplete="username"
           required
           className="mt-2 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-primary"
-          placeholder="admin@helenagabriela.com.br"
+          placeholder=""
         />
 
         <label className="mt-5 block text-xs uppercase tracking-[0.2em] text-muted-foreground">Senha</label>

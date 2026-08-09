@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Calendar as CalendarIcon, Clock, Check, MessageCircle, Loader2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { createBooking } from "@/services/booking";
+import api from "@/lib/api";
 
 export const Route = createFileRoute("/agendamentos")({
   head: () => ({
@@ -17,7 +18,14 @@ export const Route = createFileRoute("/agendamentos")({
   component: AgendamentosPage,
 });
 
-const SERVICES = [
+interface ServiceItem {
+  id: string;
+  name: string;
+  price?: number;
+  duration?: string;
+}
+
+const FALLBACK_SERVICES = [
   "Maquiagem social",
   "Maquiagem noiva",
   "Cílios — fio a fio",
@@ -25,12 +33,15 @@ const SERVICES = [
   "Limpeza de pele",
   "Manicure / esmaltação em gel",
   "Consulta sobre cursos",
-] as const;
+];
 
 const SLOTS = ["09:00", "10:30", "13:00", "14:30", "16:00", "17:30"];
 
 function AgendamentosPage() {
-  const [service, setService] = useState<string>(SERVICES[0]);
+  const [servicesList, setServicesList] = useState<ServiceItem[]>([]);
+  const [loadingServices, setLoadingServices] = useState(true);
+
+  const [service, setService] = useState<string>("");
   const [date, setDate] = useState<Date | undefined>(undefined);
   const [slot, setSlot] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -38,6 +49,49 @@ function AgendamentosPage() {
   const [notes, setNotes] = useState("");
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Busca a lista de serviços do banco de dados Neon via API
+  useEffect(() => {
+    async function fetchServices() {
+      try {
+        setLoadingServices(true);
+        const response = await api.get("/services");
+        const data = response.data;
+
+        if (Array.isArray(data) && data.length > 0) {
+          setServicesList(data);
+          setService(data[0].name); // Seleciona o primeiro serviço do banco
+        } else {
+          // Fallback caso a tabela no banco esteja vazia
+          const formattedFallback = FALLBACK_SERVICES.map((s, idx) => ({
+            id: String(idx + 1),
+            name: s,
+            price: 80,
+          }));
+          setServicesList(formattedFallback);
+          setService(formattedFallback[0].name);
+        }
+      } catch (error) {
+        console.error("Erro ao carregar serviços do banco:", error);
+        const formattedFallback = FALLBACK_SERVICES.map((s, idx) => ({
+          id: String(idx + 1),
+          name: s,
+          price: 80,
+        }));
+        setServicesList(formattedFallback);
+        setService(formattedFallback[0].name);
+      } finally {
+        setLoadingServices(false);
+      }
+    }
+
+    fetchServices();
+  }, []);
+
+  // Localiza o objeto do serviço selecionado para extrair o valor correto
+  const selectedServiceObj = useMemo(() => {
+    return servicesList.find((s) => s.name === service);
+  }, [servicesList, service]);
 
   const dateLabel = useMemo(
     () => date?.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" }),
@@ -66,10 +120,10 @@ function AgendamentosPage() {
         name,
         phone,
         item: service,
-        kind: service.includes("curso") ? "curso" : "servico",
+        kind: service.toLowerCase().includes("curso") ? "curso" : "servico",
         date: formattedDateForBackend,
         time: slot,
-        value: 80, // Valor padrão ou ajustável por serviço
+        value: selectedServiceObj?.price ?? 80,
         note: notes,
       });
 
@@ -77,7 +131,7 @@ function AgendamentosPage() {
       const msg = encodeURIComponent(
         `Olá Helena! Gostaria de agendar:\n\n• Serviço: ${service}\n• Data: ${dateLabel}\n• Horário: ${slot}\n• Nome: ${name}\n• Telefone: ${phone}${notes ? `\n• Observações: ${notes}` : ""}`,
       );
-     window.open(`https://wa.me/557998580613?text=${msg}`, "_blank");
+      window.open(`https://wa.me/557998580613?text=${msg}`, "_blank");
 
       setSent(true);
     } catch (error) {
@@ -134,23 +188,30 @@ function AgendamentosPage() {
                   <span className="flex size-6 items-center justify-center rounded-full bg-primary/10">1</span>
                   Serviço
                 </div>
-                <div className="mt-5 flex flex-wrap gap-2">
-                  {SERVICES.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setService(s)}
-                      className={cn(
-                        "rounded-full border px-4 py-2 text-sm transition-colors",
-                        service === s
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-background text-foreground/80 hover:border-primary/40",
-                      )}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
+
+                {loadingServices ? (
+                  <div className="mt-5 flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin text-primary" /> Carregando serviços...
+                  </div>
+                ) : (
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {servicesList.map((s) => (
+                      <button
+                        key={s.id || s.name}
+                        type="button"
+                        onClick={() => setService(s.name)}
+                        className={cn(
+                          "rounded-full border px-4 py-2 text-sm transition-colors",
+                          service === s.name
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-background text-foreground/80 hover:border-primary/40",
+                        )}
+                      >
+                        {s.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="rounded-3xl border border-border bg-card p-8 shadow-[var(--shadow-soft)]">
@@ -207,7 +268,7 @@ function AgendamentosPage() {
                 <dl className="mt-6 space-y-4 border-y border-border/70 py-6 text-sm">
                   <div className="flex items-start justify-between gap-4">
                     <dt className="text-muted-foreground">Serviço</dt>
-                    <dd className="text-right font-medium text-foreground">{service}</dd>
+                    <dd className="text-right font-medium text-foreground">{service || "Nenhum selecionado"}</dd>
                   </div>
                   <div className="flex items-start justify-between gap-4">
                     <dt className="flex items-center gap-2 text-muted-foreground"><CalendarIcon className="size-3.5" /> Data</dt>
