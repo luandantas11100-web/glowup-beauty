@@ -14,6 +14,8 @@ export type Listing = {
   image: string;
   items: string[];
   active: boolean;
+  availableDays?: number[]; // 0 = Dom, 1 = Seg, ..., 6 = Sáb
+  availableSlots?: string[]; // Ex: ["09:00", "10:30"]
 };
 
 export type Booking = {
@@ -21,13 +23,16 @@ export type Booking = {
   name: string;
   phone: string;
   item: string;
-  kind: "servico" | "curso"; // Ajustado para minúsculo para bater com o componente
+  kind: "servico" | "curso";
   date: string; // ISO yyyy-mm-dd
   time: string;
   value: number;
   status: "pendente" | "confirmado" | "concluido" | "cancelado";
   note?: string;
 };
+
+const DEFAULT_SLOTS = ["09:00", "10:30", "13:00", "14:30", "16:00", "17:30"];
+const DEFAULT_DAYS = [1, 2, 3, 4, 5, 6]; // Segunda a Sábado
 
 export const DEFAULT_SERVICES: Listing[] = [
   {
@@ -40,6 +45,8 @@ export const DEFAULT_SERVICES: Listing[] = [
     image: String(makeupImg),
     items: ["Preparação de pele", "Maquiagem social", "Noivas e madrinhas", "Teste de make"],
     active: true,
+    availableDays: DEFAULT_DAYS,
+    availableSlots: DEFAULT_SLOTS,
   },
   {
     id: "cilios",
@@ -51,6 +58,8 @@ export const DEFAULT_SERVICES: Listing[] = [
     image: String(lashesImg),
     items: ["Fio a fio clássico", "Volume brasileiro", "Lash lifting", "Manutenção"],
     active: true,
+    availableDays: DEFAULT_DAYS,
+    availableSlots: DEFAULT_SLOTS,
   },
   {
     id: "limpeza-de-pele",
@@ -62,6 +71,8 @@ export const DEFAULT_SERVICES: Listing[] = [
     image: String(skinImg),
     items: ["Higienização profunda", "Extração", "Alta frequência", "Máscara calmante"],
     active: true,
+    availableDays: DEFAULT_DAYS,
+    availableSlots: DEFAULT_SLOTS,
   },
   {
     id: "unhas",
@@ -69,10 +80,12 @@ export const DEFAULT_SERVICES: Listing[] = [
     tag: "Manicure & Gel",
     duration: "1h",
     price: 120,
-    desc: "Manicure, esmaltação em gel e xalongamentos com acabamento impecável.",
+    desc: "Manicure, esmaltação em gel e alongamentos com acabamento impecável.",
     image: String(nailsImg),
     items: ["Manicure clássica", "Esmaltação em gel", "Alongamento em fibra", "Nail art"],
     active: true,
+    availableDays: DEFAULT_DAYS,
+    availableSlots: DEFAULT_SLOTS,
   },
 ];
 
@@ -87,6 +100,8 @@ export const DEFAULT_COURSES: Listing[] = [
     image: String(courseImg),
     items: ["Preparação de pele", "Base e contorno", "Olhos e cílios", "Boca"],
     active: true,
+    availableDays: DEFAULT_DAYS,
+    availableSlots: DEFAULT_SLOTS,
   },
   {
     id: "profissionalizante",
@@ -98,6 +113,8 @@ export const DEFAULT_COURSES: Listing[] = [
     image: String(makeupImg),
     items: ["Fundamentos", "Noivas e formaturas", "Editorial", "Empreendedorismo", "Certificado"],
     active: true,
+    availableDays: DEFAULT_DAYS,
+    availableSlots: DEFAULT_SLOTS,
   },
   {
     id: "curso-unhas",
@@ -109,6 +126,8 @@ export const DEFAULT_COURSES: Listing[] = [
     image: String(nailsImg),
     items: ["Biossegurança", "Manicure clássica", "Gel", "Alongamento", "Nail art"],
     active: true,
+    availableDays: DEFAULT_DAYS,
+    availableSlots: DEFAULT_SLOTS,
   },
 ];
 

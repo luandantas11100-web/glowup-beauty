@@ -24,21 +24,39 @@ interface BookingOption {
   price?: number;
   duration?: string;
   kind: "servico" | "curso";
+  availableDays?: number[];
+  availableSlots?: string[];
 }
 
+const DEFAULT_SLOTS = ["09:00", "10:30", "13:00", "14:30", "16:00", "17:30"];
+const DEFAULT_DAYS = [1, 2, 3, 4, 5, 6]; // Seg a Sáb
+
 const FALLBACK_SERVICES: BookingOption[] = [
-  { id: "f1", name: "Maquiagem social", price: 80, kind: "servico" },
-  { id: "f2", name: "Maquiagem noiva", price: 150, kind: "servico" },
-  { id: "f3", name: "Cílios — fio a fio", price: 90, kind: "servico" },
-  { id: "f4", name: "Cílios — volume", price: 110, kind: "servico" },
-  { id: "f5", name: "Limpeza de pele", price: 100, kind: "servico" },
-  { id: "f6", name: "Manicure / esmaltação em gel", price: 50, kind: "servico" },
-  { id: "f7", name: "Consulta sobre cursos", price: 0, kind: "curso" },
+  { id: "f1", name: "Maquiagem social", price: 80, kind: "servico", availableDays: DEFAULT_DAYS, availableSlots: DEFAULT_SLOTS },
+  { id: "f2", name: "Maquiagem noiva", price: 150, kind: "servico", availableDays: DEFAULT_DAYS, availableSlots: DEFAULT_SLOTS },
+  { id: "f3", name: "Cílios — fio a fio", price: 90, kind: "servico", availableDays: DEFAULT_DAYS, availableSlots: DEFAULT_SLOTS },
+  { id: "f4", name: "Cílios — volume", price: 110, kind: "servico", availableDays: DEFAULT_DAYS, availableSlots: DEFAULT_SLOTS },
+  { id: "f5", name: "Limpeza de pele", price: 100, kind: "servico", availableDays: DEFAULT_DAYS, availableSlots: DEFAULT_SLOTS },
+  { id: "f6", name: "Manicure / esmaltação em gel", price: 50, kind: "servico", availableDays: DEFAULT_DAYS, availableSlots: DEFAULT_SLOTS },
+  { id: "f7", name: "Consulta sobre cursos", price: 0, kind: "curso", availableDays: DEFAULT_DAYS, availableSlots: DEFAULT_SLOTS },
 ];
 
-const SLOTS = ["09:00", "10:30", "13:00", "14:30", "16:00", "17:30"];
+function parseJSONField<T>(val: any, fallback: T): T {
+  if (!val) return fallback;
+  if (Array.isArray(val)) return val as unknown as T;
+  if (typeof val === "string") {
+    try {
+      return JSON.parse(val) as T;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
 
 function AgendamentosPage() {
+  const search = Route.useSearch<{ item?: string; kind?: string }>();
+
   const [itemsList, setItemsList] = useState<BookingOption[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
 
@@ -51,7 +69,6 @@ function AgendamentosPage() {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Busca serviços e cursos simultaneamente do banco via API
   useEffect(() => {
     async function fetchServicesAndCourses() {
       try {
@@ -65,13 +82,14 @@ function AgendamentosPage() {
         const servicesData = Array.isArray(servicesRes.data) ? servicesRes.data : [];
         const coursesData = Array.isArray(coursesRes.data) ? coursesRes.data : [];
 
-        // Mapeia os dados do backend garantindo compatibilidade de nome/title
         const mappedServices: BookingOption[] = servicesData.map((s: any) => ({
           id: s.id,
           name: s.name || s.title || "Serviço sem nome",
           price: s.price ?? 80,
           duration: s.duration,
           kind: "servico",
+          availableDays: parseJSONField<number[]>(s.availableDays, DEFAULT_DAYS),
+          availableSlots: parseJSONField<string[]>(s.availableSlots, DEFAULT_SLOTS),
         }));
 
         const mappedCourses: BookingOption[] = coursesData.map((c: any) => ({
@@ -80,13 +98,21 @@ function AgendamentosPage() {
           price: c.price ?? 100,
           duration: c.duration,
           kind: "curso",
+          availableDays: parseJSONField<number[]>(c.availableDays, DEFAULT_DAYS),
+          availableSlots: parseJSONField<string[]>(c.availableSlots, DEFAULT_SLOTS),
         }));
 
         const combinedList = [...mappedServices, ...mappedCourses];
 
         if (combinedList.length > 0) {
           setItemsList(combinedList);
-          setService(combinedList[0].name);
+
+          // Se veio via URL param (item), seleciona ele; senão o primeiro da lista
+          const matchedItem = search?.item
+            ? combinedList.find((i) => i.name.toLowerCase() === search.item?.toLowerCase())
+            : undefined;
+
+          setService(matchedItem ? matchedItem.name : combinedList[0].name);
         } else {
           setItemsList(FALLBACK_SERVICES);
           setService(FALLBACK_SERVICES[0].name);
@@ -101,12 +127,32 @@ function AgendamentosPage() {
     }
 
     fetchServicesAndCourses();
-  }, []);
+  }, [search?.item]);
 
-  // Localiza o item selecionado para extrair preço e tipo (servico ou curso)
+  // Item selecionado
   const selectedItemObj = useMemo(() => {
     return itemsList.find((s) => s.name === service);
   }, [itemsList, service]);
+
+  // Lista de horários disponíveis para o serviço selecionado
+  const availableSlots = useMemo(() => {
+    return selectedItemObj?.availableSlots?.length
+      ? selectedItemObj.availableSlots
+      : DEFAULT_SLOTS;
+  }, [selectedItemObj]);
+
+  // Quando trocar o serviço, desmarca o slot e valida se a data atual ainda é permitida
+  const handleSelectService = (newServiceName: string) => {
+    setService(newServiceName);
+    setSlot(null);
+
+    const newObj = itemsList.find((s) => s.name === newServiceName);
+    const allowedDays = newObj?.availableDays?.length ? newObj.availableDays : DEFAULT_DAYS;
+
+    if (date && !allowedDays.includes(date.getDay())) {
+      setDate(undefined);
+    }
+  };
 
   const dateLabel = useMemo(
     () => date?.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" }),
@@ -154,6 +200,22 @@ function AgendamentosPage() {
       setLoading(false);
     }
   }
+
+  // Função para determinar se uma data deve estar desabilitada no calendário
+  const isDateDisabled = (d: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Datas passadas
+    if (d < today) return true;
+
+    // Filtro por dias de funcionamento configurados para o serviço/curso
+    const allowedDays = selectedItemObj?.availableDays?.length
+      ? selectedItemObj.availableDays
+      : DEFAULT_DAYS;
+
+    return !allowedDays.includes(d.getDay());
+  };
 
   return (
     <>
@@ -211,7 +273,7 @@ function AgendamentosPage() {
                       <button
                         key={item.id || item.name}
                         type="button"
-                        onClick={() => setService(item.name)}
+                        onClick={() => handleSelectService(item.name)}
                         className={cn(
                           "rounded-full border px-4 py-2 text-sm transition-colors",
                           service === item.name
@@ -236,7 +298,7 @@ function AgendamentosPage() {
                     mode="single"
                     selected={date}
                     onSelect={setDate}
-                    disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0)) || d.getDay() === 0}
+                    disabled={isDateDisabled}
                     className={cn("rounded-md pointer-events-auto")}
                   />
                 </div>
@@ -249,9 +311,11 @@ function AgendamentosPage() {
                 </div>
                 {!date ? (
                   <p className="mt-5 text-sm text-muted-foreground">Selecione uma data para ver os horários disponíveis.</p>
+                ) : availableSlots.length === 0 ? (
+                  <p className="mt-5 text-sm text-muted-foreground">Não há horários disponíveis para este serviço nesta data.</p>
                 ) : (
                   <div className="mt-5 grid grid-cols-3 gap-3 sm:grid-cols-6">
-                    {SLOTS.map((h) => (
+                    {availableSlots.map((h) => (
                       <button
                         key={h}
                         type="button"
