@@ -89,7 +89,7 @@ function AgendamentosPage() {
           duration: s.duration,
           kind: "servico",
           availableDays: parseJSONField<number[]>(s.availableDays, DEFAULT_DAYS),
-          availableSlots: parseJSONField<string[]>(s.availableSlots, DEFAULT_SLOTS),
+          availableSlots: parseJSONField<string[]>(s.availableHours || s.availableSlots, DEFAULT_SLOTS),
         }));
 
         const mappedCourses: BookingOption[] = coursesData.map((c: any) => ({
@@ -99,7 +99,7 @@ function AgendamentosPage() {
           duration: c.duration,
           kind: "curso",
           availableDays: parseJSONField<number[]>(c.availableDays, DEFAULT_DAYS),
-          availableSlots: parseJSONField<string[]>(c.availableSlots, DEFAULT_SLOTS),
+          availableSlots: parseJSONField<string[]>(c.availableHours || c.availableSlots, DEFAULT_SLOTS),
         }));
 
         const combinedList = [...mappedServices, ...mappedCourses];
@@ -107,7 +107,6 @@ function AgendamentosPage() {
         if (combinedList.length > 0) {
           setItemsList(combinedList);
 
-          // Se veio via URL param (item), seleciona ele; senão o primeiro da lista
           const matchedItem = search?.item
             ? combinedList.find((i) => i.name.toLowerCase() === search.item?.toLowerCase())
             : undefined;
