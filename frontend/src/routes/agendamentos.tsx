@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Calendar as CalendarIcon, Clock, Check, MessageCircle, Loader2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { createBooking } from "@/services/booking";
 import api from "@/lib/api";
@@ -194,19 +195,16 @@ function AgendamentosPage() {
 • Nome: ${name}
 • Telefone: ${phone}${notes ? `\n• Observações: ${notes}` : ""}`;
 
-const encodedMsg = encodeURIComponent(messageText);
-const phoneNum = "557996335787";
+      const encodedMsg = encodeURIComponent(messageText);
+      const phoneNum = "557996335787";
 
-// Detecta se é um dispositivo móvel (iOS / Android)
-const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-if (isMobile) {
-  // Redireciona na mesma aba em dispositivos móveis (evita bloqueio de pop-up no Safari iOS)
-  window.location.href = `https://api.whatsapp.com/send?phone=${phoneNum}&text=${encodedMsg}`;
-} else {
-  // Em computadores, abre em uma nova aba
-  window.open(`https://web.whatsapp.com/send?phone=${phoneNum}&text=${encodedMsg}`, "_blank");
-}
+      if (isMobile) {
+        window.location.href = `https://api.whatsapp.com/send?phone=${phoneNum}&text=${encodedMsg}`;
+      } else {
+        window.open(`https://web.whatsapp.com/send?phone=${phoneNum}&text=${encodedMsg}`, "_blank");
+      }
       setSent(true);
     } catch (error) {
       console.error("Erro ao registrar agendamento:", error);
@@ -216,15 +214,12 @@ if (isMobile) {
     }
   }
 
-  // Função para determinar se uma data deve estar desabilitada no calendário
   const isDateDisabled = (d: Date) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Datas passadas
     if (d < today) return true;
 
-    // Filtro por dias de funcionamento configurados para o serviço/curso
     const allowedDays = selectedItemObj?.availableDays?.length
       ? selectedItemObj.availableDays
       : DEFAULT_DAYS;
@@ -279,8 +274,13 @@ if (isMobile) {
                 </div>
 
                 {loadingItems ? (
-                  <div className="mt-5 flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin text-primary" /> Carregando opções...
+                  /* Skeleton do bloco de opções de serviço */
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <Skeleton className="h-9 w-36 rounded-full" />
+                    <Skeleton className="h-9 w-32 rounded-full" />
+                    <Skeleton className="h-9 w-40 rounded-full" />
+                    <Skeleton className="h-9 w-36 rounded-full" />
+                    <Skeleton className="h-9 w-28 rounded-full" />
                   </div>
                 ) : (
                   <div className="mt-5 flex flex-wrap gap-2">
@@ -358,7 +358,13 @@ if (isMobile) {
                 <dl className="mt-6 space-y-4 border-y border-border/70 py-6 text-sm">
                   <div className="flex items-start justify-between gap-4">
                     <dt className="text-muted-foreground">Opção</dt>
-                    <dd className="text-right font-medium text-foreground">{service || "Nenhuma selecionada"}</dd>
+                    <dd className="text-right font-medium text-foreground">
+                      {loadingItems ? (
+                        <Skeleton className="h-4 w-32" />
+                      ) : (
+                        service || "Nenhuma selecionada"
+                      )}
+                    </dd>
                   </div>
                   <div className="flex items-start justify-between gap-4">
                     <dt className="flex items-center gap-2 text-muted-foreground"><CalendarIcon className="size-3.5" /> Data</dt>
