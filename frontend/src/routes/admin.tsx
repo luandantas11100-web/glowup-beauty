@@ -13,7 +13,10 @@ import { type Listing, brl } from "@/lib/admin-data";
 
 const TOKEN_KEY = "hg-admin-token";
 const FALLBACK_TOKEN_KEY = "@glowup:token";
-const API_BASE_URL = "http://localhost:3333";
+
+const API_BASE_URL = import.meta.env.VITE_API_URL 
+  ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, "") 
+  : "http://localhost:3333";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
