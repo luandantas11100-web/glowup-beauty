@@ -186,11 +186,27 @@ function AgendamentosPage() {
         note: notes,
       });
 
-      const msg = encodeURIComponent(
-        `Olá Helena! Gostaria de agendar:\n\n• Opção: ${service}\n• Data: ${dateLabel}\n• Horário: ${slot}\n• Nome: ${name}\n• Telefone: ${phone}${notes ? `\n• Observações: ${notes}` : ""}`,
-      );
-      window.open(`https://wa.me/557998580613?text=${msg}`, "_blank");
+      const messageText = `Olá Helena! Gostaria de agendar:
 
+• Opção: ${service}
+• Data: ${dateLabel}
+• Horário: ${slot}
+• Nome: ${name}
+• Telefone: ${phone}${notes ? `\n• Observações: ${notes}` : ""}`;
+
+const encodedMsg = encodeURIComponent(messageText);
+const phoneNum = "557998580613";
+
+// Detecta se é um dispositivo móvel (iOS / Android)
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+if (isMobile) {
+  // Redireciona na mesma aba em dispositivos móveis (evita bloqueio de pop-up no Safari iOS)
+  window.location.href = `https://api.whatsapp.com/send?phone=${phoneNum}&text=${encodedMsg}`;
+} else {
+  // Em computadores, abre em uma nova aba
+  window.open(`https://web.whatsapp.com/send?phone=${phoneNum}&text=${encodedMsg}`, "_blank");
+}
       setSent(true);
     } catch (error) {
       console.error("Erro ao registrar agendamento:", error);
