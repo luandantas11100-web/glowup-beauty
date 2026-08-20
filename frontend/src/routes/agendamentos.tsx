@@ -195,7 +195,7 @@ function AgendamentosPage() {
 • Telefone: ${phone}${notes ? `\n• Observações: ${notes}` : ""}`;
 
 const encodedMsg = encodeURIComponent(messageText);
-const phoneNum = "557998580613";
+const phoneNum = "557996335787";
 
 // Detecta se é um dispositivo móvel (iOS / Android)
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
